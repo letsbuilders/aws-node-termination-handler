@@ -1,0 +1,51 @@
+name: Build and Push
+
+on:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - "v*.*.*"
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DEFAULT_GO_VERSION: ^1.21.5
+  IMG_REPO: 783314667363.dkr.ecr.eu-west-1.amazonaws.com/aws-ec2/aws-node-termination-handler
+  OS: windows
+  ARCH: amd64
+  WINDOWS_VERSION: ltsc2022
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    name: Build Windows Docker Images
+    runs-on: windows-2022
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v4
+
+    - name: Build Windows Docker Images
+      run: |
+        docker build --file "Dockerfile.windows" --build-arg WINDOWS_VERSION="${{ env.WINDOWS_VERSION }}" --tag "${{ env.IMG_REPO }}:nanoserver-${{ env.WINDOWS_VERSION }}-${{ env.ARCH }}-${{ github.sha }}" .
+
+    - name: configure aws credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::783314667363:role/letsbuilders-github-actions
+        role-skip-session-tagging: true
+        role-duration-seconds: 3600
+        aws-region: "eu-west-1"
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+      with:
+        mask-password: true
+
+    - run: |
+        docker push "${{ env.IMG_REPO }}:nanoserver-${{ env.WINDOWS_VERSION }}-${{ env.ARCH }}-${{ github.sha }}"
+
